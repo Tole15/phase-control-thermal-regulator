@@ -1,95 +1,251 @@
-# Phase-Synchronized Thermal Regulation System
+# ⚡ Phase-Synchronized Thermal Regulation System
 
 ## AC Phase-Control via Zero-Cross Detection & Discrete PI Control
 
-This repository implements a closed-loop thermal regulation system using phase-angle control for AC resistive loads. The system synchronizes TRIAC firing with mains zero-cross events and regulates temperature through a discrete-time Proportional-Integral (PI) controller.
-
-**Validated on Hardware:** 127V / 60Hz.
-
----
-
-## 1. System Overview
-
-The system monitors temperature via an **LM35 sensor** (signal-conditioned to a 0–5V range). The signal is processed by a discrete PI controller, which determines the necessary power delivery. Power is modulated using a TRIAC on a 75W resistive load.
-
-* **Control Loop Frequency:** 2 Hz (Updates every 0.5s).
-* **Synchronization Frequency:** 120 Hz (Synchronized to every AC half-cycle).
+![Platform](https://img.shields.io/badge/Platform-Arduino-blue)
+![Control](https://img.shields.io/badge/Control-Discrete%20PI-green)
+![Mains](https://img.shields.io/badge/Mains-127V%20%7C%2060Hz-orange)
+![Load](https://img.shields.io/badge/Load-75W%20Resistive-critical)
 
 ---
 
-## 2. Hardware Architecture
+## 📌 Overview
 
-### Control Unit
+This project implements a **closed-loop thermal regulation system** using **phase-angle control** for AC resistive loads.  
+TRIAC firing is synchronized with **mains zero-cross events**, while temperature is regulated using a **discrete-time PI controller**.
 
-* **Microcontroller:** Arduino (ATmega328P).
-* **External Interrupt (INT0):** Dedicated to high-speed Zero-Cross detection.
-* **Timer1:** Utilized for high-precision firing delay (via `PWMUNO` or custom registers).
-
-### Power Stage
-
-* **Detection:** Opto-isolated zero-cross sensing for galvanic isolation.
-* **Actuation:** MOC-series opto-triac driver + Power TRIAC.
-* **Load:** 75W AC resistive load (Incandescent/Heating element).
-
-### Sensor & Conditioning
-
-* **Sensor:** LM35 Linear Temperature Sensor.
-* **Conditioning:** Active filtering and amplification via Operational Amplifiers (Op-Amps) to utilize the full 10-bit ADC range (0–5V).
+✔ Hardware validated at **127V / 60Hz**  
+✔ Real-time zero-cross synchronization (120 Hz)  
+✔ Deterministic discrete control loop (2 Hz)
 
 ---
 
-## 3. Control Strategy
+## 🧠 System Architecture
 
-### Timing & Sampling
+### Control Strategy
 
-* **Zero-Cross Events:** Detected every 8.33ms (120 Hz).
-* **Control Update:** Every 60 zero-cross events.
-* **Effective Sampling Time ($T_s$):** $0.5\text{ s}$.
+- **Control Loop Frequency:** 2 Hz (Update every 0.5 s)
+- **Zero-Cross Synchronization:** 120 Hz (Every half-cycle)
+- **Sampling Time (Ts):** 0.5 s
 
-### Discrete PI Controller
-
-The controller uses the Tustin (Bilinear) or Backward Euler approximation. The recursive form implemented is:
-
-$$u(k) = u(k-1) + q_0 e(k) + q_1 e(k-1)$$
-
-Where the constants for a Trapezoidal integration are:
-
-* $q_0 = K_p + \frac{K_i T_s}{2}$
-* $q_1 = \frac{K_i T_s}{2} - K_p$
-
-**Variables:**
-
-* $e(k)$: Current error (Setpoint - Measured).
-* $u(k)$: Control effort (Mapped to TRIAC conduction angle).
-
-### Power Modulation
-
-The control effort $u(k)$ is converted into a timer compare value (**CMP**). The TRIAC is triggered after a delay calculated as:
-$$t_{delay} = t_{half\_cycle} - t_{conduction}$$
-The output is saturated between $0$ and $ICR1$ to prevent timing overflows.
+The system measures temperature using an **LM35 sensor**, processes the signal through a discrete PI controller, and modulates AC power via TRIAC phase-angle control.
 
 ---
 
-## 4. Engineering Specifications
+## 🔌 Hardware Architecture
 
-| Parameter | Value |
-| :--- | :--- |
-| **Mains Voltage** | 127V AC |
-| **Mains Frequency** | 60 Hz |
-| **Half-Cycle Period** | 8.333 ms |
-| **Resolution** | 16-bit (Timer1) |
-| **Zero-Cross Interrupt** | Rising Edge (INT0) |
+### 🔹 Control & Synchronization
+
+- **Microcontroller:** ATmega328P (Arduino platform)
+- **Zero-Cross Detection:**
+  - 2W10G Bridge Rectifier
+  - PC817 Optocoupler
+- **Interrupt:** INT0 (External interrupt)
+- **Timer:** Timer1 (High-precision firing delay generation)
+
+![Zero Cross Circuit](img/esquematico_pzc.png)
 
 ---
 
-## 5. Repository Structure
+### 🔹 Power Stage
 
-```text
+- **Opto-Driver:** MOC3021
+- **Power TRIAC:** BTA06-600BW
+- **Load:** 75W AC Resistive (Heating element / Incandescent lamp)
+
+![Power Stage](img/esquematico_potencia.png)
+
+---
+
+### 🔹 Sensor & Signal Conditioning
+
+- **Sensor:** LM35 Linear Temperature Sensor
+- **Signal Conditioning:**
+  - Active filtering
+  - Operational amplifier scaling
+  - Full 0–5V ADC utilization (10-bit resolution)
+
+---
+
+## 📊 Signal Validation
+
+Oscilloscope verification confirms correct synchronization between:
+
+- 🔵 AC waveform
+- 🟡 Zero-cross detection pulse
+
+| Parameter | Measured Value |
+|------------|---------------|
+| PZC Frequency | 120.0 Hz |
+| Half-cycle Period | 8.33 ms |
+| PZC Vpp | 3.00 V |
+
+![Oscilloscope Validation](img/osciloscopio_pzc.png)
+
+---
+
+## 🧮 Discrete PI Controller
+
+Recursive implementation:
+
+```
+u(k) = u(k-1) + q0·e(k) + q1·e(k-1)
+```
+
+Using trapezoidal (Tustin) approximation:
+
+```
+q0 = Kp + (Ki·Ts)/2
+q1 = (Ki·Ts)/2 - Kp
+```
+
+### Variables
+
+- `e(k)` → Current error (Setpoint − Measured temperature)
+- `u(k)` → Control effort (Mapped to conduction angle)
+
+---
+
+## 🔥 Power Modulation
+
+The PI output is mapped to a Timer1 compare value.
+
+TRIAC firing delay:
+
+```
+t_delay = t_half_cycle - t_conduction
+```
+
+Output saturation ensures safe operation:
+
+```
+0 ≤ CMP ≤ ICR1
+```
+
+---
+
+## 🖥 PCB Design
+
+The PCB integrates:
+
+- Zero-cross detection stage
+- Opto-isolated TRIAC driver
+- Power switching stage
+
+Design considerations:
+
+- Track width for load current handling
+- Isolation spacing for safety
+- Noise-aware layout
+
+![PCB Layout](img/pcb_d.png)
+
+![PCB 3D Render](img/pcb_render.png)
+
+---
+
+## 📊 Results / Experimental Response Plot
+
+The closed-loop thermal response was experimentally validated under step reference conditions.
+
+### 🔹 Step Response Test
+
+- Initial Temperature: Ambient (~25°C)
+- Setpoint: 28°C (Short-range validation test)
+- Control Mode: Discrete PI (Ts = 0.5 s)
+- Load: 75W resistive heater
+
+Observed behavior:
+
+- Smooth temperature rise
+- No sustained oscillations
+- Stable steady-state regulation
+- Minimal steady-state error
+
+![Maximum Power Test](img/maxp.png)
+
+*Figure 1: System response under maximum conduction angle.*
+
+![Closed-Loop Step Response](img/step_response.png)
+
+*Figure 2: Experimental closed-loop temperature response near target setpoint.*
+
+---
+
+## 🧮 Mathematical Modeling
+
+The thermal plant is approximated as a first-order system:
+
+```
+G(s) = K / (τs + 1)
+```
+
+Where:
+
+- `K` → Thermal gain
+- `τ` → Thermal time constant
+
+Considering phase-angle modulation, the effective RMS power delivered to the load as a function of firing angle (α) is:
+
+```
+P(α) ≈ (Vm² / 2R) · (1/π) · (π - α + 0.5·sin(2α))
+```
+
+The discrete-time controller is derived using the Tustin transformation:
+
+```
+s ≈ (2/Ts) · (z - 1)/(z + 1)
+```
+
+Closed-loop transfer function (idealized continuous model):
+
+```
+T(s) = (Gc(s)G(s)) / (1 + Gc(s)G(s))
+```
+
+Where:
+
+```
+Gc(s) = Kp + Ki/s
+```
+
+---
+
+## 📂 Repository Structure
+
+```
 ├── firmware/
 │   └── arduino/
-│       └── Control.ino        # PI Control + Zero-Cross ISR logic
+│       └── main.ino        # PI Control + Zero-Cross ISR logic
 ├── docs/
-│   ├── DIMMER.pdf      # Detailed experimental report
-│   └── AcondicionamientoLM35.pdf       # System block diagram
+│   ├── Practica7.pdf       # Experimental report
+│   └── diagrama.pdf        # Block diagram
 └── hardware/
-    └── cadcam/            # Gerber files / PCB Design
+    └── cadcam/             # Gerber files / PCB design
+```
+
+---
+
+## 🚀 Key Features
+
+- Deterministic phase-angle control
+- Hardware-level synchronization
+- Discrete PI digital implementation
+- Interrupt-driven architecture
+- Experimental hardware validation
+
+---
+
+## 📈 Applications
+
+- Temperature regulation systems
+- Industrial heating control
+- AC power modulation
+- Embedded control education
+- Digital control system demonstrations
+
+---
+
+## 📜 License
+
+This project is provided for academic and educational purposes.
